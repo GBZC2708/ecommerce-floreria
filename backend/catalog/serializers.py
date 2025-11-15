@@ -13,15 +13,14 @@ from .models import (
 )
 
 
+# ============================================================
+# PRODUCTOS / CATEGORÍAS
+# ============================================================
+
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = [
-            'id',
-            'image',
-            'is_main',
-            'order',
-        ]
+        fields = ['id', 'image', 'is_main', 'order']
         read_only_fields = ['id']
 
 
@@ -42,7 +41,10 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    # lectura
     category = CategorySerializer(read_only=True)
+
+    # escritura
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(),
         source='category',
@@ -72,6 +74,10 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+
+# ============================================================
+# CONFIGURACIÓN & CONTACTO
+# ============================================================
 
 class SiteConfigSerializer(serializers.ModelSerializer):
     class Meta:
@@ -110,24 +116,37 @@ class ContactRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+# ============================================================
+# CARRITO (ALINEADO CON TU FRONTEND)
+# ============================================================
+
 class CartItemSerializer(serializers.ModelSerializer):
-    product_detail = ProductSerializer(source='product', read_only=True)
+    """
+    Alineado con el tipo TS:
+
+    export interface CartItem {
+      id: number
+      product: number
+      quantity: number
+      unit_price_snapshot: string
+    }
+    """
 
     class Meta:
         model = CartItem
-        fields = [
-            'id',
-            'product',
-            'product_detail',
-            'quantity',
-            'unit_price_snapshot',
-        ]
-        read_only_fields = ['id', 'product_detail']
+        fields = ['id', 'product', 'quantity', 'unit_price_snapshot']
+        read_only_fields = ['id']
 
 
 class CartSerializer(serializers.ModelSerializer):
+    """
+    Usa "items" tanto para lectura como para escritura.
+    El frontend siempre envía la lista completa de items,
+    así que en cada update simplemente reemplazamos todo.
+    """
+
     user = serializers.PrimaryKeyRelatedField(read_only=True)
-    items = CartItemSerializer(many=True, read_only=True)
+    items = CartItemSerializer(many=True, required=False)
 
     class Meta:
         model = Cart
@@ -140,8 +159,44 @@ class CartSerializer(serializers.ModelSerializer):
             'updated_at',
             'items',
         ]
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at', 'items']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
+    def _replace_items(self, cart: Cart, items_data: list[dict]) -> None:
+        """
+        Estrategia simple y robusta:
+
+        1) Borramos todos los CartItem del carrito.
+        2) Creamos nuevamente según el payload.
+        """
+        CartItem.objects.filter(cart=cart).delete()
+
+        for data in items_data:
+            CartItem.objects.create(
+                cart=cart,
+                product=data['product'],
+                quantity=data['quantity'],
+                unit_price_snapshot=data['unit_price_snapshot'],
+            )
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        cart = super().create(validated_data)
+        if items_data:
+            self._replace_items(cart, items_data)
+        return cart
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop('items', None)
+        cart = super().update(instance, validated_data)
+        if items_data is not None:
+            self._replace_items(cart, items_data)
+        return cart
+
+
+
+# ============================================================
+# PEDIDOS
+# ============================================================
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product_detail = ProductSerializer(source='product', read_only=True)

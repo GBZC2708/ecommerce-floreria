@@ -87,20 +87,28 @@ class ContactRequestViewSet(viewsets.ModelViewSet):
 
 
 class CartViewSet(viewsets.ModelViewSet):
+    # Usamos un queryset base con los prefetch necesarios
+    queryset = Cart.objects.select_related('user').prefetch_related(
+        'items__product',
+        'items__product__category',
+    )
     serializer_class = CartSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = Cart.objects.select_related('user').prefetch_related('items__product', 'items__product__category')
-        if self.request.user.is_staff:
-            return queryset
-        return queryset.filter(user=self.request.user)
+    # MUY IMPORTANTE: permitir acceso sin autenticación para el MVP
+    permission_classes = [permissions.AllowAny]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        """
+        Para este MVP permitimos carritos anónimos.
+        Si el usuario está autenticado, se asocia; si no, user queda en None
+        y se usará session_id para identificar el carrito desde el frontend.
+        """
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
 
     def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
+
 
 
 class OrderViewSet(viewsets.ModelViewSet):
