@@ -1,6 +1,13 @@
 import type { AxiosRequestConfig } from 'axios'
 import httpClient from './httpClient'
-import type { Cart, Category, Product, SiteConfig } from '../types/catalog'
+import type {
+  Cart,
+  Category,
+  Order,
+  OrderPayload,
+  Product,
+  SiteConfig,
+} from '../types/catalog'
 
 // Tipo genérico para respuestas paginadas de DRF
 type PaginatedResponse<T> = {
@@ -113,5 +120,14 @@ export const updateCart = async (
   payload: CartPayload
 ): Promise<Cart> => {
   const { data } = await httpClient.patch<Cart>(`/carts/${cartId}/`, payload)
+  return data
+}
+
+// =======================
+// ORDERS
+// =======================
+
+export const createOrder = async (payload: OrderPayload): Promise<Order> => {
+  const { data } = await httpClient.post<Order>('/orders/', payload)
   return data
 }

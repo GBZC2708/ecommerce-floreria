@@ -113,13 +113,16 @@ class CartViewSet(viewsets.ModelViewSet):
 
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
         queryset = Order.objects.select_related('user').prefetch_related('items__product')
+        if not self.request.user.is_authenticated:
+            return queryset.none()
         if self.request.user.is_staff:
             return queryset
         return queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
