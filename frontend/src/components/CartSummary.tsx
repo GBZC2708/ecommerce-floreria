@@ -32,8 +32,19 @@ const CartSummary = () => {
         </Box>
       </Stack>
       <Stack spacing={2} mt={3}>
-        <Button variant="contained" color="primary" size="large" fullWidth disabled>
-          Continuar
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          fullWidth
+          disabled={!cart?.items.length}
+          onClick={() => {
+            if (cart?.items.length) {
+              navigate('/checkout')
+            }
+          }}
+        >
+          Continuar con la compra
         </Button>
         <Button variant="outlined" color="primary" onClick={() => navigate('/')}>Seguir comprando</Button>
         <Button color="secondary" onClick={() => clearCart()} disabled={loading || !cart?.items.length}>

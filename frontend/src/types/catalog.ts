@@ -66,3 +66,43 @@ export interface Cart {
   updated_at: string
   items: CartItem[]
 }
+
+export type PaymentMethod = 'CARD' | 'YAPE' | 'PLIN' | 'TRANSFER' | 'CASH'
+
+export type OrderStatus = 'CREATED' | 'PAID' | 'SHIPPED' | 'DELIVERED' | 'CANCELED'
+
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED'
+
+export interface Order {
+  id: number
+  user: number | null
+  status: OrderStatus
+  subtotal: string
+  shipping_cost: string
+  discount_total: string
+  total: string
+  payment_method: PaymentMethod
+  payment_status: PaymentStatus
+  shipping_full_name: string
+  shipping_phone: string
+  shipping_address_text: string
+  notes_customer: string | null
+  notes_admin: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OrderPayload {
+  status: OrderStatus
+  subtotal: string
+  shipping_cost: string
+  discount_total: string
+  total: string
+  payment_method: PaymentMethod
+  payment_status: PaymentStatus
+  shipping_full_name: string
+  shipping_phone: string
+  shipping_address_text: string
+  notes_customer?: string | null
+  notes_admin?: string | null
+}
