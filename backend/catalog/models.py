@@ -1,5 +1,9 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 
 class Category(models.Model):
@@ -32,6 +36,7 @@ class Product(models.Model):
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=9, decimal_places=2)
     stock = models.PositiveIntegerField(default=0)
+    popularity_score = models.PositiveIntegerField(default=0)
     image_principal = models.ImageField(upload_to="products/", null=True, blank=True)
     is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -211,6 +216,7 @@ class Order(models.Model):
         choices=PAYMENT_STATUS_CHOICES,
         default=PAYMENT_STATUS_PENDING,
     )
+    coupon_code = models.CharField(max_length=50, blank=True)
     shipping_full_name = models.CharField(max_length=150)
     shipping_phone = models.CharField(max_length=30)
     shipping_address_text = models.CharField(max_length=255)
@@ -243,3 +249,61 @@ class OrderItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.product_name_snapshot} ({self.quantity})"
+
+
+class Coupon(models.Model):
+    TYPE_PERCENT = "PERCENT"
+    TYPE_FIXED = "FIXED"
+    TYPE_CHOICES = [
+        (TYPE_PERCENT, "Porcentaje"),
+        (TYPE_FIXED, "Monto fijo"),
+    ]
+
+    code = models.CharField(max_length=50, unique=True)
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default=TYPE_PERCENT)
+    value = models.DecimalField(max_digits=9, decimal_places=2)
+    min_order_amount = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    single_use = models.BooleanField(default=False)
+    usage_count = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.code
+
+    @classmethod
+    def apply_coupon(cls, code: str, subtotal: Decimal):
+        try:
+            coupon = cls.objects.get(code__iexact=code, is_active=True)
+        except cls.DoesNotExist:
+            raise ValidationError({"coupon_code": "Cupón inválido."})
+
+        now = timezone.now()
+        if coupon.valid_from and coupon.valid_from > now:
+            raise ValidationError({"coupon_code": "Este cupón aún no está vigente."})
+        if coupon.valid_until and coupon.valid_until < now:
+            raise ValidationError({"coupon_code": "Este cupón ha expirado."})
+
+        if subtotal < coupon.min_order_amount:
+            raise ValidationError(
+                {"coupon_code": f"El pedido no alcanza el mínimo para este cupón ({coupon.min_order_amount})."}
+            )
+
+        if coupon.single_use and coupon.usage_count >= 1:
+            raise ValidationError({"coupon_code": "Este cupón ya fue usado."})
+
+        if coupon.type == cls.TYPE_PERCENT:
+            discount = (subtotal * coupon.value) / Decimal("100")
+        else:
+            discount = coupon.value
+
+        discount = min(discount, subtotal)
+
+        return coupon, discount

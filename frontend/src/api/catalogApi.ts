@@ -46,9 +46,13 @@ export const getCategoryBySlug = async (slug: string): Promise<Category> => {
   return data
 }
 
-export const getCategoryProducts = async (slug: string): Promise<Product[]> => {
+export const getCategoryProducts = async (
+  slug: string,
+  config?: AxiosRequestConfig
+): Promise<Product[]> => {
   const { data } = await httpClient.get<PaginatedResponse<Product> | Product[]>(
-    `/categories/${slug}/products/`
+    `/categories/${slug}/products/`,
+    config
   )
   return unwrapPaginated(data)
 }

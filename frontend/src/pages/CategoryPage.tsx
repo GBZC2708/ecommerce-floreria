@@ -1,8 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Grid from '@mui/material/GridLegacy'
-import { Alert, Box, Breadcrumbs, Button, CircularProgress, Link, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Breadcrumbs,
+  Button,
+  CircularProgress,
+  Link,
+  Stack,
+  TextField,
+  Typography,
+  MenuItem,
+} from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCategoryBySlug, getCategoryProducts } from '../api/catalogApi'
+import { getCategoryBySlug, getProducts } from '../api/catalogApi'
 import type { Category, Product } from '../types/catalog'
 import ProductCard from '../components/ProductCard'
 
@@ -13,6 +24,23 @@ const CategoryPage = () => {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [ordering, setOrdering] = useState<'popularity' | 'price_asc' | 'price_desc' | 'newest'>('popularity')
+
+  const orderingParam = useMemo(() => {
+    switch (ordering) {
+      case 'price_asc':
+        return 'price'
+      case 'price_desc':
+        return '-price'
+      case 'newest':
+        return '-created_at'
+      default:
+        return '-popularity'
+    }
+  }, [ordering])
 
   useEffect(() => {
     const fetchCategory = async () => {
@@ -22,7 +50,15 @@ const CategoryPage = () => {
       try {
         const [categoryData, productData] = await Promise.all([
           getCategoryBySlug(slug),
-          getCategoryProducts(slug),
+          getProducts({
+            params: {
+              category: slug,
+              search: search || undefined,
+              min_price: minPrice || undefined,
+              max_price: maxPrice || undefined,
+              ordering: orderingParam,
+            },
+          }),
         ])
         setCategory(categoryData)
         setProducts(productData.filter((product) => product.is_active))
@@ -34,8 +70,9 @@ const CategoryPage = () => {
       }
     }
 
-    fetchCategory()
-  }, [slug])
+    const debounce = setTimeout(fetchCategory, 300)
+    return () => clearTimeout(debounce)
+  }, [slug, search, minPrice, maxPrice, orderingParam])
 
   if (loading) {
     return (
@@ -69,6 +106,50 @@ const CategoryPage = () => {
           {category.description}
         </Typography>
       </Box>
+
+      <Grid container spacing={2} alignItems="center">
+        <Grid item xs={12} md={4}>
+          <TextField
+            label="Buscar"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rosas, tulipanes..."
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={6} md={2}>
+          <TextField
+            label="Precio mínimo"
+            type="number"
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={6} md={2}>
+          <TextField
+            label="Precio máximo"
+            type="number"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            fullWidth
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <TextField
+            select
+            label="Ordenar"
+            value={ordering}
+            onChange={(e) => setOrdering(e.target.value as typeof ordering)}
+            fullWidth
+          >
+            <MenuItem value="popularity">Más populares</MenuItem>
+            <MenuItem value="price_asc">Más baratos</MenuItem>
+            <MenuItem value="price_desc">Más caros</MenuItem>
+            <MenuItem value="newest">Más recientes</MenuItem>
+          </TextField>
+        </Grid>
+      </Grid>
 
       {products.length === 0 ? (
         <Alert severity="info">Aún no hay productos en esta categoría.</Alert>

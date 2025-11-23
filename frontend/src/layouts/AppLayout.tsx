@@ -11,17 +11,20 @@ import {
   Typography,
 } from '@mui/material'
 import { Outlet, useNavigate } from 'react-router-dom'
+import Button from '@mui/material/Button'
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined'
 import ThemeToggle from '../components/ThemeToggle'
 import { getSiteConfig } from '../api/catalogApi'
 import type { SiteConfig } from '../types/catalog'
 import useCart from '../hooks/useCart'
+import { useAuthContext } from '../context/AuthContext'
 
 const AppLayout = () => {
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(false)
   const navigate = useNavigate()
   const { cartItemCount } = useCart()
+  const { user, logout } = useAuthContext()
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -60,6 +63,25 @@ const AppLayout = () => {
             Fleuré
           </Typography>
           <Stack direction="row" spacing={2} alignItems="center">
+            {user ? (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                <Typography variant="body2" color="text.secondary">
+                  {user.first_name || user.username || user.email}
+                </Typography>
+                <Button size="small" onClick={logout} color="inherit">
+                  Cerrar sesión
+                </Button>
+              </Stack>
+            ) : (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                <Button size="small" onClick={() => navigate('/login')} color="inherit">
+                  Iniciar sesión
+                </Button>
+                <Button size="small" onClick={() => navigate('/register')} color="inherit">
+                  Crear cuenta
+                </Button>
+              </Stack>
+            )}
             <ThemeToggle />
             <IconButton color="inherit" onClick={() => navigate('/cart')} aria-label="Carrito">
               <Badge badgeContent={cartItemCount} color="secondary" overlap="rectangular" showZero>

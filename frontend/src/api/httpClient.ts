@@ -10,6 +10,17 @@ export const httpClient = axios.create({
   },
 })
 
+httpClient.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = window.localStorage.getItem('floure_auth_token')
+    if (token) {
+      config.headers = config.headers ?? {}
+      config.headers.Authorization = `Token ${token}`
+    }
+  }
+  return config
+})
+
 httpClient.interceptors.response.use(
   (response) => response,
   (error) => {

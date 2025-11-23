@@ -160,8 +160,15 @@ export const CartProvider = ({ children }: PropsWithChildren) => {
         }))
         const existingItem = payloadItems.find((item) => item.product === product.id)
         if (existingItem) {
-          existingItem.quantity += quantity
+          const desired = existingItem.quantity + quantity
+          if (desired > product.stock) {
+            throw new Error(`Stock disponible: ${product.stock} unidades.`)
+          }
+          existingItem.quantity = desired
         } else {
+          if (quantity > product.stock) {
+            throw new Error(`Stock disponible: ${product.stock} unidades.`)
+          }
           payloadItems.push({
             product: product.id,
             quantity,
@@ -171,7 +178,7 @@ export const CartProvider = ({ children }: PropsWithChildren) => {
         await syncCart(activeCart.id, payloadItems)
         setProductsById((prev) => ({ ...prev, [product.id]: product }))
       } catch (err) {
-        setError('No se pudo actualizar el carrito.')
+        setError(err instanceof Error ? err.message : 'No se pudo actualizar el carrito.')
         console.error(err)
         throw err
       } finally {
@@ -216,21 +223,27 @@ export const CartProvider = ({ children }: PropsWithChildren) => {
       setLoading(true)
       setError(null)
       try {
-        const payloadItems: CartItemPayload[] = cart.items.map((item) => ({
-          id: item.id,
-          product: item.product,
-          quantity: item.id === itemId ? quantity : item.quantity,
-          unit_price_snapshot: item.unit_price_snapshot,
-        }))
+        const payloadItems: CartItemPayload[] = cart.items.map((item) => {
+          const productData = productsById[item.product]
+          if (item.id === itemId && productData && quantity > productData.stock) {
+            throw new Error(`Stock disponible: ${productData.stock} unidades.`)
+          }
+          return {
+            id: item.id,
+            product: item.product,
+            quantity: item.id === itemId ? quantity : item.quantity,
+            unit_price_snapshot: item.unit_price_snapshot,
+          }
+        })
         await syncCart(cart.id, payloadItems)
       } catch (err) {
-        setError('No se pudo actualizar la cantidad.')
+        setError(err instanceof Error ? err.message : 'No se pudo actualizar la cantidad.')
         console.error(err)
       } finally {
         setLoading(false)
       }
     },
-    [cart, removeItem, syncCart],
+    [cart, productsById, removeItem, syncCart],
   )
 
   const clearCart = useCallback(async () => {
