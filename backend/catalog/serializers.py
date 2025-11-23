@@ -1,10 +1,12 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from .models import (
     Cart,
     CartItem,
     Category,
     ContactRequest,
+    Coupon,
     Order,
     OrderItem,
     Product,
@@ -65,6 +67,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'description',
             'price',
             'stock',
+            'popularity_score',
             'image_principal',
             'is_featured',
             'is_active',
@@ -114,6 +117,26 @@ class ContactRequestSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class CouponSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coupon
+        fields = [
+            'id',
+            'code',
+            'type',
+            'value',
+            'min_order_amount',
+            'valid_from',
+            'valid_until',
+            'single_use',
+            'usage_count',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'usage_count', 'created_at', 'updated_at']
 
 
 # ============================================================
@@ -171,10 +194,21 @@ class CartSerializer(serializers.ModelSerializer):
         CartItem.objects.filter(cart=cart).delete()
 
         for data in items_data:
+            product = data['product']
+            quantity = data['quantity']
+
+            if isinstance(product, int):
+                product = Product.objects.get(pk=product)
+
+            if quantity > product.stock:
+                raise ValidationError(
+                    f"No hay stock suficiente para {product.name}. Stock disponible: {product.stock}."
+                )
+
             CartItem.objects.create(
                 cart=cart,
-                product=data['product'],
-                quantity=data['quantity'],
+                product=product,
+                quantity=quantity,
                 unit_price_snapshot=data['unit_price_snapshot'],
             )
 
@@ -231,6 +265,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'total',
             'payment_method',
             'payment_status',
+            'coupon_code',
             'shipping_full_name',
             'shipping_phone',
             'shipping_address_text',

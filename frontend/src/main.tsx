@@ -9,6 +9,7 @@ import router from './router'
 import { createAppTheme } from './theme/theme'
 import { CartProvider } from './context/CartContext'
 import { ThemeModeContext } from './context/ThemeModeContext'
+import { AuthProvider } from './context/AuthContext'
 
 const RootApp = () => {
   const [mode, setMode] = useState<PaletteMode>(() => {
@@ -40,9 +41,11 @@ const RootApp = () => {
     <ThemeModeContext.Provider value={{ mode, toggleMode }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <CartProvider>
-          <RouterProvider router={router} />
-        </CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            <RouterProvider router={router} />
+          </CartProvider>
+        </AuthProvider>
       </ThemeProvider>
     </ThemeModeContext.Provider>
   )

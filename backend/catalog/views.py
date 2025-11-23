@@ -1,13 +1,21 @@
+from decimal import Decimal
+
+from django.core.mail import send_mail
+from django.db import transaction
+from django.db.models import Count, F
 from django.http import Http404
-from rest_framework import generics, permissions, viewsets
+from django.shortcuts import get_object_or_404
+from rest_framework import filters, generics, permissions, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from .models import Cart, Category, ContactRequest, Order, Product, SiteConfig
+from .models import Cart, CartItem, Category, ContactRequest, Coupon, Order, OrderItem, Product, SiteConfig
 from .serializers import (
     CartSerializer,
     CategorySerializer,
     ContactRequestSerializer,
+    CouponSerializer,
     OrderSerializer,
     ProductSerializer,
     SiteConfigSerializer,
@@ -32,9 +40,24 @@ class CategoryViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def products(self, request, *args, **kwargs):
         category = self.get_object()
-        products = category.products.all()
+        products = category.products.select_related('category').prefetch_related('images')
         if not request.user.is_staff:
-            products = products.filter(is_active=True)
+            products = products.filter(is_active=True, category__is_active=True)
+
+        # Filtros básicos
+        min_price = request.query_params.get('min_price')
+        max_price = request.query_params.get('max_price')
+        if min_price:
+            products = products.filter(price__gte=min_price)
+        if max_price:
+            products = products.filter(price__lte=max_price)
+
+        products = products.annotate(order_count=Count('orderitem'), popularity=F('popularity_score') + Count('orderitem'))
+
+        ordering = request.query_params.get('ordering')
+        if ordering:
+            products = products.order_by(ordering)
+
         page = self.paginate_queryset(products)
         serializer = ProductSerializer(
             page if page is not None else products,
@@ -49,14 +72,31 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     lookup_field = 'slug'
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'short_description', 'description', 'sku', 'category__name']
+    ordering_fields = ['price', 'created_at', 'popularity']
+    ordering = ['-created_at']
 
     def get_queryset(self):
-        queryset = Product.objects.select_related('category').prefetch_related('images').all()
+        queryset = Product.objects.select_related('category').prefetch_related('images')
         if not self.request.user.is_staff:
             queryset = queryset.filter(is_active=True, category__is_active=True)
+
         category_slug = self.request.query_params.get('category')
         if category_slug:
             queryset = queryset.filter(category__slug=category_slug)
+
+        min_price = self.request.query_params.get('min_price')
+        max_price = self.request.query_params.get('max_price')
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+
+        queryset = queryset.annotate(
+            order_count=Count('orderitem'),
+            popularity=F('popularity_score') + Count('orderitem'),
+        )
         return queryset
 
     def get_permissions(self):
@@ -85,30 +125,40 @@ class ContactRequestViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
 
+    def perform_create(self, serializer):
+        contact_request = serializer.save()
+        site_config = SiteConfig.objects.first()
+        recipient = site_config.contact_email if site_config and site_config.contact_email else None
+        if recipient:
+            send_mail(
+                subject="Nuevo mensaje de contacto Fleuré",
+                message=(
+                    f"Nombre: {contact_request.name}\n"
+                    f"Teléfono: {contact_request.phone}\n"
+                    f"Email: {contact_request.email}\n"
+                    f"Mensaje: {contact_request.message}"
+                ),
+                from_email=None,
+                recipient_list=[recipient],
+                fail_silently=True,
+            )
+
 
 class CartViewSet(viewsets.ModelViewSet):
-    # Usamos un queryset base con los prefetch necesarios
     queryset = Cart.objects.select_related('user').prefetch_related(
         'items__product',
         'items__product__category',
     )
     serializer_class = CartSerializer
-    # MUY IMPORTANTE: permitir acceso sin autenticación para el MVP
     permission_classes = [permissions.AllowAny]
 
     def perform_create(self, serializer):
-        """
-        Para este MVP permitimos carritos anónimos.
-        Si el usuario está autenticado, se asocia; si no, user queda en None
-        y se usará session_id para identificar el carrito desde el frontend.
-        """
         user = self.request.user if self.request.user.is_authenticated else None
         serializer.save(user=user)
 
     def perform_update(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
         serializer.save(user=user)
-
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -125,4 +175,74 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
-        serializer.save(user=user)
+        cart_id = self.request.data.get('cart_id')
+        coupon_code = self.request.data.get('coupon_code')
+
+        if not cart_id:
+            raise ValidationError({"cart_id": "Es obligatorio indicar el carrito para crear el pedido."})
+
+        cart = get_object_or_404(
+            Cart.objects.prefetch_related('items__product'),
+            pk=cart_id,
+            status=Cart.STATUS_OPEN,
+        )
+
+        if not cart.items.exists():
+            raise ValidationError("El carrito está vacío.")
+
+        with transaction.atomic():
+            subtotal = Decimal('0.00')
+            for item in cart.items.all():
+                if item.quantity > item.product.stock:
+                    raise ValidationError(
+                        f"Sin stock suficiente para {item.product.name}. Stock disponible: {item.product.stock}."
+                    )
+                subtotal += item.unit_price_snapshot * item.quantity
+
+            shipping_cost = Decimal(self.request.data.get('shipping_cost', '0.00'))
+            discount_total = Decimal('0.00')
+            applied_coupon = None
+
+            if coupon_code:
+                applied_coupon, discount_total = Coupon.apply_coupon(code=coupon_code, subtotal=subtotal)
+
+            total = subtotal + shipping_cost - discount_total
+
+            order = serializer.save(
+                user=user,
+                subtotal=subtotal,
+                shipping_cost=shipping_cost,
+                discount_total=discount_total,
+                total=total,
+                coupon_code=applied_coupon.code if applied_coupon else '',
+            )
+
+            for item in cart.items.select_related('product'):
+                product = item.product
+                if item.quantity > product.stock:
+                    raise ValidationError(
+                        f"Sin stock suficiente para {product.name}. Stock disponible: {product.stock}."
+                    )
+                OrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    product_name_snapshot=product.name,
+                    unit_price_snapshot=item.unit_price_snapshot,
+                    quantity=item.quantity,
+                    line_total=item.unit_price_snapshot * item.quantity,
+                )
+                product.stock -= item.quantity
+                product.save()
+
+            cart.status = Cart.STATUS_CONVERTED
+            cart.save()
+
+            if applied_coupon and applied_coupon.single_use:
+                applied_coupon.usage_count += 1
+                applied_coupon.save()
+
+
+class CouponViewSet(viewsets.ModelViewSet):
+    queryset = Coupon.objects.all()
+    serializer_class = CouponSerializer
+    permission_classes = [permissions.IsAdminUser]

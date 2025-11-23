@@ -1,11 +1,23 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import Grid from '@mui/material/GridLegacy'
-import { Alert, Box, Button, Paper, Radio, RadioGroup, Snackbar, Stack, TextField, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Paper,
+  Radio,
+  RadioGroup,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+  Link,
+} from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import { useNavigate } from 'react-router-dom'
 import useCart from '../hooks/useCart'
-import { createOrder } from '../api/catalogApi'
-import type { OrderPayload, PaymentMethod } from '../types/catalog'
+import { createOrder, getSiteConfig } from '../api/catalogApi'
+import type { Order, OrderPayload, PaymentMethod, SiteConfig } from '../types/catalog'
 
 interface FormState {
   shipping_full_name: string
@@ -38,6 +50,15 @@ const CheckoutPage = () => {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successOpen, setSuccessOpen] = useState(false)
+  const [couponCode, setCouponCode] = useState('')
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null)
+
+  useEffect(() => {
+    getSiteConfig()
+      .then(setSiteConfig)
+      .catch((err) => console.warn('No se pudo cargar SiteConfig', err))
+  }, [])
 
   const hasItems = Boolean(cart?.items.length)
 
@@ -55,6 +76,13 @@ const CheckoutPage = () => {
       total: subtotalValue + shipping - discount,
     }
   }, [cart])
+
+  const whatsappLink = useMemo(() => {
+    if (!siteConfig?.whatsapp_number || !createdOrder?.id) return null
+    return `https://wa.me/${siteConfig.whatsapp_number}?text=${encodeURIComponent(
+      `Hola, quiero consultar sobre el pedido N° ${createdOrder.id}.`,
+    )}`
+  }, [createdOrder?.id, siteConfig?.whatsapp_number])
 
   if (!cart || !hasItems) {
     return (
@@ -105,6 +133,7 @@ const CheckoutPage = () => {
     setErrorMessage(null)
     try {
       const payload: OrderPayload = {
+        cart_id: cart.id,
         // Dejamos el estado inicial en CREATED para registrar el pedido
         status: 'CREATED',
         // El backend espera strings para los valores monetarios, usamos toFixed para mantener 2 decimales
@@ -122,15 +151,13 @@ const CheckoutPage = () => {
         notes_admin: `Pedido web Fleuré – Cart ID ${cart.id} – Session ${cart.session_id ?? 'N/A'}${
           formState.shipping_email ? ` – Email ${formState.shipping_email}` : ''
         }`,
+        coupon_code: couponCode || undefined,
       }
 
-      await createOrder(payload)
+      const orderResponse = await createOrder(payload)
+      setCreatedOrder(orderResponse)
       await clearCart()
       setSuccessOpen(true)
-      // Redirigimos después de un pequeño delay para que el usuario lea la confirmación
-      setTimeout(() => {
-        navigate('/')
-      }, 4000)
     } catch (error) {
       console.error('Error creando la orden', error)
       setErrorMessage('No se pudo registrar tu pedido, inténtalo nuevamente.')
@@ -248,6 +275,13 @@ const CheckoutPage = () => {
               </Typography>
               <Typography variant="body1">-${discountTotal.toFixed(2)}</Typography>
             </Box>
+            <TextField
+              label="Cupón de descuento"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value)}
+              placeholder="Ingresa tu cupón"
+              fullWidth
+            />
             <Box display="flex" justifyContent="space-between">
               <Typography variant="h6">Total a pagar</Typography>
               <Typography variant="h6" sx={{ color: '#C8A878' }}>
@@ -258,6 +292,25 @@ const CheckoutPage = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
             Una vez confirmes tu pedido nos comunicaremos por WhatsApp para finalizar los detalles del pago y la entrega.
           </Typography>
+          {createdOrder && (
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              {whatsappLink && (
+                <Button component={Link} href={whatsappLink} target="_blank" rel="noopener" variant="outlined">
+                  Escribir por WhatsApp
+                </Button>
+              )}
+              {siteConfig?.contact_email && (
+                <Button
+                  component={Link}
+                  href={`mailto:${siteConfig.contact_email}`}
+                  variant="text"
+                  rel="noopener"
+                >
+                  Enviar correo a {siteConfig.contact_email}
+                </Button>
+              )}
+            </Stack>
+          )}
         </Paper>
       </Grid>
       <Snackbar

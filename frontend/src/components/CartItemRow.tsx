@@ -16,6 +16,7 @@ const CartItemRow = ({ itemId, productId, quantity, unitPrice }: Props) => {
   const product = productsById[productId]
   const priceNumber = Number(unitPrice)
   const subtotal = priceNumber * quantity
+  const maxReached = product ? quantity >= product.stock : false
 
   return (
     <>
@@ -35,7 +36,12 @@ const CartItemRow = ({ itemId, productId, quantity, unitPrice }: Props) => {
           <Typography variant="body1" sx={{ minWidth: 32, textAlign: 'center' }}>
             {quantity}
           </Typography>
-          <IconButton onClick={() => updateItemQuantity(itemId, quantity + 1)} size="small" aria-label="Incrementar">
+          <IconButton
+            onClick={() => updateItemQuantity(itemId, quantity + 1)}
+            size="small"
+            aria-label="Incrementar"
+            disabled={maxReached}
+          >
             <AddRoundedIcon />
           </IconButton>
         </Stack>

@@ -5,6 +5,7 @@ from .models import (
     CartItem,
     Category,
     ContactRequest,
+    Coupon,
     Order,
     OrderItem,
     Product,
@@ -28,7 +29,16 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'stock', 'is_active', 'is_featured', 'created_at')
+    list_display = (
+        'name',
+        'category',
+        'price',
+        'stock',
+        'popularity_score',
+        'is_active',
+        'is_featured',
+        'created_at',
+    )
     list_filter = ('category', 'is_active', 'is_featured')
     search_fields = ('name', 'slug', 'sku')
     prepopulated_fields = {'slug': ('name',)}
@@ -94,6 +104,7 @@ class OrderAdmin(admin.ModelAdmin):
         'total',
         'payment_method',
         'payment_status',
+        'coupon_code',
         'created_at',
     )
     list_filter = ('status', 'payment_status', 'payment_method')
@@ -112,4 +123,22 @@ class OrderItemAdmin(admin.ModelAdmin):
         'line_total',
     )
     search_fields = ('order__id', 'product_name_snapshot')
+
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    list_display = (
+        'code',
+        'type',
+        'value',
+        'min_order_amount',
+        'single_use',
+        'usage_count',
+        'valid_from',
+        'valid_until',
+        'is_active',
+        'created_at',
+    )
+    list_filter = ('type', 'single_use', 'is_active')
+    search_fields = ('code',)
 

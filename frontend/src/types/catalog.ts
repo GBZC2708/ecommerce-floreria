@@ -18,7 +18,7 @@ export interface Category {
 
 export interface Product {
   id: number
-  category: number
+  category: Category
   name: string
   slug: string
   sku: string | null
@@ -26,6 +26,7 @@ export interface Product {
   description: string
   price: string
   stock: number
+  popularity_score: number
   image_principal: string | null
   is_featured: boolean
   is_active: boolean
@@ -93,6 +94,7 @@ export interface Order {
 }
 
 export interface OrderPayload {
+  cart_id: number
   status: OrderStatus
   subtotal: string
   shipping_cost: string
@@ -105,4 +107,5 @@ export interface OrderPayload {
   shipping_address_text: string
   notes_customer?: string | null
   notes_admin?: string | null
+  coupon_code?: string
 }
