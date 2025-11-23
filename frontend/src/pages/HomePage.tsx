@@ -120,7 +120,7 @@ const HomePage = () => {
         >
           <Box
             component="img"
-            src="https://images.unsplash.com/photo-1520256862855-398228c41684?auto=format&fit=crop&w=900&q=80"
+            src="https://centralparty.pe/cdn/shop/files/PRECIO20.png?v=1739392995&width=1946"
             alt="Ramo Fleuré"
             sx={{ borderRadius: 4, width: '100%', height: '100%', objectFit: 'cover', boxShadow: '0 25px 65px rgba(26,26,26,0.2)' }}
           />

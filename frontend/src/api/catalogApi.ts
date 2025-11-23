@@ -9,12 +9,22 @@ import type {
   SiteConfig,
 } from '../types/catalog'
 
+
 // Tipo genérico para respuestas paginadas de DRF
 type PaginatedResponse<T> = {
   count: number
   next: string | null
   previous: string | null
   results: T[]
+}
+
+interface ApplyCouponResponse {
+  code: string
+  type: 'PERCENT' | 'FIXED'
+  value: string
+  min_order_amount: string
+  discount: string
+  subtotal: string
 }
 
 // Helper para usar tanto respuestas paginadas como listas simples
@@ -48,11 +58,11 @@ export const getCategoryBySlug = async (slug: string): Promise<Category> => {
 
 export const getCategoryProducts = async (
   slug: string,
-  config?: AxiosRequestConfig
+  config?: AxiosRequestConfig,
 ): Promise<Product[]> => {
   const { data } = await httpClient.get<PaginatedResponse<Product> | Product[]>(
     `/categories/${slug}/products/`,
-    config
+    config,
   )
   return unwrapPaginated(data)
 }
@@ -62,11 +72,11 @@ export const getCategoryProducts = async (
 // =======================
 
 export const getProducts = async (
-  config?: AxiosRequestConfig
+  config?: AxiosRequestConfig,
 ): Promise<Product[]> => {
   const { data } = await httpClient.get<PaginatedResponse<Product> | Product[]>(
     '/products/',
-    config
+    config,
   )
   return unwrapPaginated(data)
 }
@@ -104,7 +114,7 @@ interface CartItemPayload {
 }
 
 export interface CartPayload {
-  session_id: string
+  session_id: string | null
   status: 'OPEN' | 'CONVERTED' | 'ABANDONED'
   items?: CartItemPayload[]
 }
@@ -121,7 +131,7 @@ export const getCart = async (cartId: number): Promise<Cart> => {
 
 export const updateCart = async (
   cartId: number,
-  payload: CartPayload
+  payload: CartPayload,
 ): Promise<Cart> => {
   const { data } = await httpClient.patch<Cart>(`/carts/${cartId}/`, payload)
   return data
@@ -133,5 +143,36 @@ export const updateCart = async (
 
 export const createOrder = async (payload: OrderPayload): Promise<Order> => {
   const { data } = await httpClient.post<Order>('/orders/', payload)
+  return data
+}
+
+// =======================
+// CUPONES
+// =======================
+
+export const applyCoupon = async (
+  code: string,
+  subtotal: number,
+): Promise<ApplyCouponResponse> => {
+  const { data } = await httpClient.post<ApplyCouponResponse>('/coupons/apply/', {
+    code,
+    subtotal: subtotal.toFixed(2),
+  })
+  return data
+}
+
+// =======================
+// CARRITO USUARIO
+// =======================
+
+export const getCurrentUserCart = async (): Promise<Cart> => {
+  const { data } = await httpClient.get<Cart>('/carts/current/')
+  return data
+}
+
+export const mergeGuestCart = async (guestCartId: number): Promise<Cart> => {
+  const { data } = await httpClient.post<Cart>('/carts/merge/', {
+    guest_cart_id: guestCartId,
+  })
   return data
 }

@@ -16,8 +16,10 @@ import {
 import FormControlLabel from '@mui/material/FormControlLabel'
 import { useNavigate } from 'react-router-dom'
 import useCart from '../hooks/useCart'
-import { createOrder, getSiteConfig } from '../api/catalogApi'
+import { applyCoupon, createOrder, getSiteConfig } from '../api/catalogApi'
 import type { Order, OrderPayload, PaymentMethod, SiteConfig } from '../types/catalog'
+import { formatCurrency } from '../utils/money'
+
 
 interface FormState {
   shipping_full_name: string
@@ -51,6 +53,9 @@ const CheckoutPage = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successOpen, setSuccessOpen] = useState(false)
   const [couponCode, setCouponCode] = useState('')
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [applyingCoupon, setApplyingCoupon] = useState(false)
+  const [discountFromCoupon, setDiscountFromCoupon] = useState(0)
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null)
 
@@ -62,20 +67,20 @@ const CheckoutPage = () => {
 
   const hasItems = Boolean(cart?.items.length)
 
-  const { subtotal, shippingCost, discountTotal, total } = useMemo(() => {
-    const subtotalValue = cart?.items.reduce((acc, item) => {
-      // Calculamos subtotal sumando cantidad x precio congelado del carrito
-      return acc + Number(item.unit_price_snapshot) * item.quantity
-    }, 0) ?? 0
-    const shipping = 0
-    const discount = 0
-    return {
-      subtotal: subtotalValue,
-      shippingCost: shipping,
-      discountTotal: discount,
-      total: subtotalValue + shipping - discount,
-    }
+  // Subtotal calculado desde el carrito
+  const subtotal = useMemo(() => {
+    return (
+      cart?.items.reduce((acc, item) => {
+        return acc + Number(item.unit_price_snapshot) * item.quantity
+      }, 0) ?? 0
+    )
   }, [cart])
+
+  const shippingCost = 0
+  const total = useMemo(
+    () => subtotal + shippingCost - discountFromCoupon,
+    [subtotal, shippingCost, discountFromCoupon],
+  )
 
   const whatsappLink = useMemo(() => {
     if (!siteConfig?.whatsapp_number || !createdOrder?.id) return null
@@ -93,7 +98,9 @@ const CheckoutPage = () => {
         <Typography variant="body1" color="text.secondary" maxWidth={360}>
           Agrega productos a tu carrito para continuar con el proceso de checkout.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/')}>Ver productos</Button>
+        <Button variant="contained" onClick={() => navigate('/')}>
+          Ver productos
+        </Button>
       </Stack>
     )
   }
@@ -123,6 +130,40 @@ const CheckoutPage = () => {
     return true
   }
 
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim()
+
+    if (!code) {
+      // si borras el cupón, reseteamos descuento y error
+      setDiscountFromCoupon(0)
+      setCouponError(null)
+      return
+    }
+
+    if (subtotal <= 0) {
+      setCouponError('No hay subtotal para aplicar un cupón.')
+      setDiscountFromCoupon(0)
+      return
+    }
+
+    setApplyingCoupon(true)
+    setCouponError(null)
+    try {
+      const res = await applyCoupon(code, subtotal)
+      setDiscountFromCoupon(Number(res.discount))
+    } catch (error: any) {
+      console.error('Error aplicando cupón', error)
+      const apiError =
+        error?.response?.data?.coupon_code ||
+        error?.response?.data?.detail ||
+        'No se pudo aplicar el cupón.'
+      setCouponError(apiError)
+      setDiscountFromCoupon(0)
+    } finally {
+      setApplyingCoupon(false)
+    }
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!validateForm()) {
@@ -134,12 +175,10 @@ const CheckoutPage = () => {
     try {
       const payload: OrderPayload = {
         cart_id: cart.id,
-        // Dejamos el estado inicial en CREATED para registrar el pedido
         status: 'CREATED',
-        // El backend espera strings para los valores monetarios, usamos toFixed para mantener 2 decimales
         subtotal: subtotal.toFixed(2),
         shipping_cost: shippingCost.toFixed(2),
-        discount_total: discountTotal.toFixed(2),
+        discount_total: discountFromCoupon.toFixed(2),
         total: total.toFixed(2),
         payment_method: formState.payment_method,
         payment_status: 'PENDING',
@@ -147,10 +186,9 @@ const CheckoutPage = () => {
         shipping_phone: formState.shipping_phone,
         shipping_address_text: formState.shipping_address_text,
         notes_customer: formState.notes_customer ? formState.notes_customer : undefined,
-        // Incluimos notas administrativas con contexto útil para el equipo de Fleuré
-        notes_admin: `Pedido web Fleuré – Cart ID ${cart.id} – Session ${cart.session_id ?? 'N/A'}${
-          formState.shipping_email ? ` – Email ${formState.shipping_email}` : ''
-        }`,
+        notes_admin: `Pedido web Fleuré – Cart ID ${cart.id} – Session ${
+          cart.session_id ?? 'N/A'
+        }${formState.shipping_email ? ` – Email ${formState.shipping_email}` : ''}`,
         coupon_code: couponCode || undefined,
       }
 
@@ -224,12 +262,7 @@ const CheckoutPage = () => {
                   onChange={handleFieldChange('payment_method')}
                 >
                   {paymentOptions.map((option) => (
-                    <FormControlLabel
-                      key={option.value}
-                      value={option.value}
-                      control={<Radio />}
-                      label={option.label}
-                    />
+                    <FormControlLabel key={option.value} value={option.value} control={<Radio />} label={option.label} />
                   ))}
                 </RadioGroup>
               </Box>
@@ -260,32 +293,48 @@ const CheckoutPage = () => {
                 Subtotal
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                ${subtotal.toFixed(2)}
+                {formatCurrency(subtotal)}
               </Typography>
             </Box>
             <Box display="flex" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">
                 Envío
               </Typography>
-              <Typography variant="body1">${shippingCost.toFixed(2)}</Typography>
+              <Typography variant="body1">{formatCurrency(shippingCost)}</Typography>
             </Box>
             <Box display="flex" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">
                 Descuentos
               </Typography>
-              <Typography variant="body1">-${discountTotal.toFixed(2)}</Typography>
+              <Typography variant="body1">-{formatCurrency(discountFromCoupon)}</Typography>
             </Box>
-            <TextField
-              label="Cupón de descuento"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              placeholder="Ingresa tu cupón"
-              fullWidth
-            />
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                label="Cupón de descuento"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="Ingresa tu cupón"
+                fullWidth
+              />
+              <Button
+                variant="outlined"
+                onClick={handleApplyCoupon}
+                disabled={applyingCoupon}
+              >
+                {applyingCoupon ? 'Aplicando...' : 'Aplicar'}
+              </Button>
+            </Stack>
+            {couponError && (
+              <Typography variant="caption" color="error">
+                {couponError}
+              </Typography>
+            )}
+
             <Box display="flex" justifyContent="space-between">
               <Typography variant="h6">Total a pagar</Typography>
               <Typography variant="h6" sx={{ color: '#C8A878' }}>
-                ${total.toFixed(2)}
+                  {formatCurrency(total)}
               </Typography>
             </Box>
           </Stack>

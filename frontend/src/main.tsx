@@ -41,11 +41,13 @@ const RootApp = () => {
     <ThemeModeContext.Provider value={{ mode, toggleMode }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <AuthProvider>
-          <CartProvider>
+        {/* CartProvider DEBE envolver a AuthProvider
+           porque AuthContext usa useCartContext */}
+        <CartProvider>
+          <AuthProvider>
             <RouterProvider router={router} />
-          </CartProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </CartProvider>
       </ThemeProvider>
     </ThemeModeContext.Provider>
   )

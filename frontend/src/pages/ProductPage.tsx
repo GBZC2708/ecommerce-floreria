@@ -19,6 +19,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getProductBySlug } from '../api/catalogApi'
 import type { Product } from '../types/catalog'
 import useCart from '../hooks/useCart'
+import { formatCurrency } from '../utils/money'
+
 
 const ProductPage = () => {
   const { slug } = useParams<{ slug: string }>()
@@ -156,7 +158,7 @@ const ProductPage = () => {
               {product.name}
             </Typography>
             <Typography variant="h4" sx={{ color: '#C8A878' }}>
-              ${Number(product.price).toFixed(2)}
+              {formatCurrency(product.price)}  
             </Typography>
             <Typography variant="body1" color="text.secondary">
               {product.short_description}

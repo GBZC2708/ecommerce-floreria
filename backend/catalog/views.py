@@ -9,6 +9,7 @@ from rest_framework import filters, generics, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework import status
 
 from .models import Cart, CartItem, Category, ContactRequest, Coupon, Order, OrderItem, Product, SiteConfig
 from .serializers import (
@@ -159,6 +160,62 @@ class CartViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
         serializer.save(user=user)
+        
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def current(self, request):
+        """
+        Devuelve el carrito OPEN del usuario.
+        Si no existe, lo crea.
+        """
+        cart, created = Cart.objects.get_or_create(
+            user=request.user,
+            status=Cart.STATUS_OPEN
+        )
+        serializer = CartSerializer(cart)
+        return Response(serializer.data)
+
+@action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+def merge(self, request):
+    guest_cart_id = request.data.get("guest_cart_id")
+    if not guest_cart_id:
+        raise ValidationError({"guest_cart_id": "El guest_cart_id es obligatorio"})
+
+    try:
+        guest_cart = Cart.objects.prefetch_related("items").get(
+            pk=guest_cart_id,
+            user__isnull=True,    # Solo carritos de invitado
+            status=Cart.STATUS_OPEN,
+        )
+    except Cart.DoesNotExist:
+        return Response({"detail": "Carrito de invitado no encontrado"}, status=404)
+
+    # Carrito del usuario
+    user = request.user
+    user_cart, created = Cart.objects.get_or_create(
+        user=user,
+        status=Cart.STATUS_OPEN,
+    )
+
+    # Fusionar ítems
+    for item in guest_cart.items.all():
+        product = item.product
+
+        user_item, created = user_cart.items.get_or_create(
+            product=product,
+            defaults={
+                "quantity": item.quantity,
+                "unit_price_snapshot": item.unit_price_snapshot,
+            }
+        )
+        if not created:
+            user_item.quantity += item.quantity
+            user_item.save()
+
+    guest_cart.delete()  # Eliminamos carrito invitado
+
+    serializer = CartSerializer(user_cart)
+    return Response(serializer.data)
+
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -246,3 +303,30 @@ class CouponViewSet(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
     serializer_class = CouponSerializer
     permission_classes = [permissions.IsAdminUser]
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def apply(self, request):
+        code = request.data.get('code', '').strip()
+        subtotal_str = request.data.get('subtotal')
+
+        if not code or subtotal_str is None:
+            raise ValidationError({'detail': 'code y subtotal son obligatorios.'})
+
+        try:
+            subtotal = Decimal(str(subtotal_str))
+        except Exception:
+            raise ValidationError({'subtotal': 'Subtotal inválido.'})
+
+        coupon, discount = Coupon.apply_coupon(code=code, subtotal=subtotal)
+
+        return Response(
+            {
+                'code': coupon.code,
+                'type': coupon.type,
+                'value': str(coupon.value),
+                'min_order_amount': str(coupon.min_order_amount),
+                'discount': str(discount),
+                'subtotal': str(subtotal),
+            },
+            status=status.HTTP_200_OK,
+        )

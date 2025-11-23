@@ -74,7 +74,10 @@ const CategoryPage = () => {
     return () => clearTimeout(debounce)
   }, [slug, search, minPrice, maxPrice, orderingParam])
 
-  if (loading) {
+  // 👇 Solo mostramos pantalla de carga la PRIMERA VEZ (cuando aún no hay categoría)
+  const isInitialLoading = loading && !category && !error
+
+  if (isInitialLoading) {
     return (
       <Stack spacing={3} alignItems="center" py={10}>
         <CircularProgress />
@@ -87,7 +90,9 @@ const CategoryPage = () => {
     return (
       <Stack spacing={3} alignItems="center" textAlign="center" py={10}>
         <Alert severity="warning">{error || 'La categoría no está disponible.'}</Alert>
-        <Button variant="contained" onClick={() => navigate('/')}>Volver al inicio</Button>
+        <Button variant="contained" onClick={() => navigate('/')}>
+          Volver al inicio
+        </Button>
       </Stack>
     )
   }
@@ -96,10 +101,12 @@ const CategoryPage = () => {
     <Stack spacing={4}>
       <Box>
         <Breadcrumbs>
-          <Link component="button" underline="hover" color="inherit" onClick={() => navigate('/')}>Inicio</Link>
+          <Link component="button" underline="hover" color="inherit" onClick={() => navigate('/')}>
+            Inicio
+          </Link>
           <Typography color="text.primary">{category.name}</Typography>
         </Breadcrumbs>
-        <Typography variant="h3" sx={{ mt: 2, fontFamily: "var(--font-title)" }}>
+        <Typography variant="h3" sx={{ mt: 2, fontFamily: 'var(--font-title)' }}>
           {category.name}
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
@@ -150,6 +157,16 @@ const CategoryPage = () => {
           </TextField>
         </Grid>
       </Grid>
+
+      {/* Si quieres, aquí podrías mostrar un mini-spinner mientras recarga productos */}
+      {/* {loading && (
+        <Stack direction="row" spacing={1} alignItems="center">
+          <CircularProgress size={18} />
+          <Typography variant="body2" color="text.secondary">
+            Actualizando productos...
+          </Typography>
+        </Stack>
+      )} */}
 
       {products.length === 0 ? (
         <Alert severity="info">Aún no hay productos en esta categoría.</Alert>

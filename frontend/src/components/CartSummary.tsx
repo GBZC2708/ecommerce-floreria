@@ -1,6 +1,7 @@
 import { Box, Button, Paper, Stack, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import useCart from '../hooks/useCart'
+import { formatCurrency } from '../utils/money'
 
 const CartSummary = () => {
   const navigate = useNavigate()
@@ -19,7 +20,7 @@ const CartSummary = () => {
             Subtotal
           </Typography>
           <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            ${subtotal.toFixed(2)}
+            {formatCurrency(subtotal)}
           </Typography>
         </Box>
         <Box display="flex" justifyContent="space-between">
@@ -27,7 +28,7 @@ const CartSummary = () => {
             Total
           </Typography>
           <Typography variant="h6" sx={{ color: '#C8A878' }}>
-            ${subtotal.toFixed(2)}
+           {formatCurrency(subtotal)}
           </Typography>
         </Box>
       </Stack>

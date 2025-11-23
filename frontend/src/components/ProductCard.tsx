@@ -13,6 +13,8 @@ import {
 import { useNavigate } from 'react-router-dom'
 import type { Product } from '../types/catalog'
 import useCart from '../hooks/useCart'
+import { formatCurrency } from '../utils/money'
+
 
 interface Props {
   product: Product
@@ -102,7 +104,7 @@ const ProductCard = ({ product }: Props) => {
             {product.short_description}
           </Typography>
           <Typography variant="h6" sx={{ mt: 2, color: '#C8A878', fontWeight: 600 }}>
-            ${Number(product.price).toFixed(2)}
+             {formatCurrency(product.price)}
           </Typography>
         </CardContent>
       </CardActionArea>

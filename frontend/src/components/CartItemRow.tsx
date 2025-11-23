@@ -3,6 +3,8 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import useCart from '../hooks/useCart'
+import { formatCurrency } from '../utils/money'
+
 
 interface Props {
   itemId: number
@@ -26,7 +28,7 @@ const CartItemRow = ({ itemId, productId, quantity, unitPrice }: Props) => {
             {product ? product.name : `Producto #${productId}`}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Precio: ${priceNumber.toFixed(2)}
+            Precio: {formatCurrency(priceNumber)} 
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
@@ -47,7 +49,7 @@ const CartItemRow = ({ itemId, productId, quantity, unitPrice }: Props) => {
         </Stack>
         <Stack direction="row" spacing={2} alignItems="center">
           <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#C8A878' }}>
-            ${subtotal.toFixed(2)}
+            {formatCurrency(subtotal)} 
           </Typography>
           <IconButton onClick={() => removeItem(itemId)} aria-label="Eliminar">
             <DeleteOutlineRoundedIcon />
